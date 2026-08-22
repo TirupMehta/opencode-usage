@@ -1,0 +1,26 @@
+name: ✨ Feature request
+description: Suggest an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that the dashboard doesn't support?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Mockups welcome.
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraint awareness
+      description: This project is intentionally zero-dependency and local-only.
+      options:
+        - label: My idea can be implemented without adding dependencies
+        - label: My idea does not require any network calls beyond localhost

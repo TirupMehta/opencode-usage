@@ -1,0 +1,36 @@
+name: 🐛 Bug report
+description: Something is broken or shows wrong numbers
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for taking the time to report this!
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: e.g. Windows 11, macOS 14.5, Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "e.g. 3.12.1"
+    validations:
+      required: true
+  - type: textarea
+    id: startup
+    attributes:
+      label: Startup log
+      description: Paste the lines printed by server.py (includes which DB path was detected)
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Expected vs actual. Attach a CSV export if numbers are involved — exports contain no message content.
+    validations:
+      required: true
