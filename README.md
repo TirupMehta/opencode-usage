@@ -20,7 +20,7 @@ One Python file serves an animated analytics dashboard to your browser by readin
 
 ## Highlights
 
-|---|---|
+| | |
 | **Live KPI strip** | Total tokens, prompt, generated, cache reads, replies, peak day/hour, period-over-period delta |
 | **Multi-series chart** | Input / output / reasoning as separate organic lines — clickable legend toggles, hover crosshair, full breakdown tooltips |
 | **Hourly distribution** | Today's usage by hour with peak-hour highlight and live "now" marker |
