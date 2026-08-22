@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+ocdash-snap/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
