@@ -147,6 +147,9 @@ def collect(window_days, now):
 
             acc = daily.setdefault(key, {"label": label, **empty_acc()})
             add_tokens(acc, d)
+            acc.setdefault("_sess", set()).add(row["session_id"])
+            hrs = acc.setdefault("_hrs", [0] * 24)
+            hrs[dt.hour] += (t.get("input", 0) or 0) + (t.get("output", 0) or 0) + (t.get("reasoning", 0) or 0)
 
             if dt.date() == today:
                 add_tokens(hourly[dt.hour], d)
@@ -175,6 +178,19 @@ def collect(window_days, now):
         model_list = sorted(models.values(), key=lambda x: -(x["input"] + x["output"] + x["reasoning"]))
         session_list = sorted(sessions.values(), key=lambda x: -x["tokens"])[:12]
 
+        def finalize(src):
+            sess = src.pop("_sess", set())
+            hrs = src.pop("_hrs", None) or []
+            ph, pv = -1, -1
+            for i, v in enumerate(hrs):
+                if v > pv:
+                    pv, ph = v, i
+            src["sessions_active"] = len(sess)
+            src["peak_hour"] = ph
+            tot = src["input"] + src["output"] + src["reasoning"]
+            src["avg_tokens"] = round(tot / src["messages"]) if src["messages"] else 0
+            return src
+
         if window_days == "all" or window_days > 120:
             step = "month"
             keys = sorted(daily.keys())
@@ -186,7 +202,7 @@ def collect(window_days, now):
                 while (y, mo) <= (ly, lm):
                     k = f"{y:04d}-{mo:02d}"
                     base = daily.get(k, {"label": datetime.date(y, mo, 1).strftime("%b %Y"), **empty_acc()})
-                    filled.append({"key": k, **base})
+                    filled.append({"key": k, **finalize(base)})
                     mo += 1
                     if mo > 12:
                         mo = 1
@@ -198,7 +214,7 @@ def collect(window_days, now):
                 day = now.date() - datetime.timedelta(days=i)
                 k = day.strftime("%Y-%m-%d")
                 base = daily.get(k, {"label": day.strftime("%d %b"), **empty_acc()})
-                filled.append({"key": k, **base})
+                filled.append({"key": k, **finalize(base)})
 
         return {
             "range": window_days,
@@ -414,6 +430,16 @@ tbody tr:hover{background:rgba(255,255,255,.02)}
 tr:first-child .rank{color:var(--accent)}
 .sharewrap{width:70px;height:3px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden;flex-shrink:0}
 .sharefill{height:100%;border-radius:99px;width:0;background:var(--accent);opacity:.55;transition:width .95s var(--ease)}
+tr.dayrow{cursor:pointer}
+tr.dayrow td:first-child{position:relative}
+tr.dayrow.open{background:rgba(76,141,248,.05)}
+tr.dayrow.open td:first-child::before{content:'';position:absolute;left:-10px;top:6px;bottom:6px;width:2px;background:var(--accent);border-radius:2px}
+.chev{display:inline-block;transition:transform .22s var(--ease);color:var(--faint)}
+tr.dayrow.open .chev{transform:rotate(90deg);color:var(--accent)}
+tr.detrow td{padding:0 10px;border-top:none;background:rgba(76,141,248,.04)}
+tr.detrow .detin{display:flex;flex-wrap:wrap;gap:6px 26px;padding:11px 2px;font-size:12px;color:var(--mut)}
+tr.detrow .detin b{font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500;margin-left:6px}
+tr.detrow.hidden{display:none}
 
 .statusbar{
   position:fixed;left:0;right:0;bottom:0;z-index:50;height:34px;
@@ -535,6 +561,31 @@ kbd{font-family:'JetBrains Mono',monospace;font-size:9.5px;background:rgba(255,2
       <table>
         <thead><tr><th></th><th>Session</th><th>Project</th><th style="text-align:right">Reqs</th><th style="text-align:right">Tokens</th><th style="text-align:right">Share</th><th style="text-align:right">Last active</th></tr></thead>
         <tbody id="sessBody"><tr><td colspan="7"><div class="skel" style="height:56px"></div></td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top:16px">
+    <div class="phead">
+      <div class="pt"><h2 id="dailyTblTitle">Daily breakdown</h2><p>Newest first · click a row for details</p></div>
+      <button class="btn ghost" id="csv2" aria-label="Export table as CSV">Export table</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>Period</th>
+          <th style="text-align:right">Input</th>
+          <th style="text-align:right">Output</th>
+          <th style="text-align:right">Reasoning</th>
+          <th style="text-align:right">Total</th>
+          <th style="text-align:right">Cache reads</th>
+          <th style="text-align:right">Replies</th>
+          <th style="text-align:right">Avg / reply</th>
+          <th style="text-align:right">Sessions</th>
+          <th style="text-align:right">Peak hour</th>
+          <th style="width:26px"></th>
+        </tr></thead>
+        <tbody id="dayBody"><tr><td colspan="11"><div class="skel" style="height:56px"></div></td></tr></tbody>
       </table>
     </div>
   </section>
@@ -985,6 +1036,55 @@ function renderSessions(ss) {
   }));
 }
 
+let openDay = null;
+
+function renderDayTable(daily, stepName) {
+  const tb = $('#dayBody');
+  $('#dailyTblTitle').textContent = stepName === 'month' ? 'Monthly breakdown' : 'Daily breakdown';
+  if (!daily.some(p => p.messages > 0)) {
+    tb.innerHTML = '<tr><td colspan="11"><div class="empty" style="height:50px">No usage in this period</div></td></tr>';
+    return;
+  }
+  const rows = [...daily].reverse();
+  const chev = '<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+  tb.innerHTML = rows.map((p, i) => {
+    const tot = p.input + p.output + p.reasoning;
+    const ph = p.peak_hour >= 0 ? String(p.peak_hour).padStart(2, '0') + ':00' : '—';
+    const det = `
+      <tr class="detrow ${openDay === i ? '' : 'hidden'}" data-det="${i}"><td colspan="11"><div class="detin">
+        <span>Cache writes<b>${full(p.cache_write)}</b></span>
+        <span>Share of period<b>${(tot / Math.max(1, daily.reduce((a, x) => a + x.input + x.output + x.reasoning, 0)) * 100).toFixed(1)}%</b></span>
+        <span>Replies<b>${full(p.messages)}</b></span>
+        <span>Sessions active<b>${p.sessions_active}</b></span>
+        <span>Avg / reply<b>${full(p.avg_tokens)}</b></span>
+      </div></td></tr>`;
+    return `<tr class="dayrow ${openDay === i ? 'open' : ''}" data-i="${i}">
+      <td style="font-weight:550">${esc(p.label)}</td>
+      <td class="num">${full(p.input)}</td>
+      <td class="num">${full(p.output)}</td>
+      <td class="num">${full(p.reasoning)}</td>
+      <td class="num" style="color:#fff;font-weight:600">${full(tot)}</td>
+      <td class="num">${full(p.cache_read)}</td>
+      <td class="num">${full(p.messages)}</td>
+      <td class="num">${full(p.avg_tokens)}</td>
+      <td class="num">${p.sessions_active}</td>
+      <td class="num">${ph}</td>
+      <td style="text-align:right">${chev}</td>
+    </tr>` + det;
+  }).join('');
+}
+
+document.addEventListener('click', ev => {
+  const row = ev.target.closest('tr.dayrow');
+  if (!row || !state.data) return;
+  const i = row.dataset.i;
+  const det = document.querySelector(`tr.detrow[data-det="${i}"]`);
+  if (!det) return;
+  openDay = openDay === i ? null : i;
+  row.classList.toggle('open', openDay === i);
+  det.classList.toggle('hidden', openDay !== i);
+});
+
 function moveInd() {
   const b = document.querySelector('.tab.on'), ind = $('#tind');
   if (!b) return;
@@ -1037,6 +1137,7 @@ function render(d) {
   renderDonut(d.totals);
   renderModels(d.models);
   renderSessions(d.sessions);
+  renderDayTable(d.daily, stepName);
 
   $('#dbPath').textContent = d.db_display;
   $('#sbMsgs').textContent = full(d.msgs_scanned) + ' replies scanned';
@@ -1094,9 +1195,27 @@ document.addEventListener('keydown', e => {
 
 function exportCsv() {
   if (!state.data) return;
-  const rows = [['period', 'input', 'output', 'reasoning', 'cache_read', 'replies']];
-  state.data.daily.forEach(p => rows.push([p.key, p.input, p.output, p.reasoning, p.cache_read, p.messages]));
-  const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
+  const d = state.data;
+  const rows = [
+    ['period', 'input_tokens', 'output_tokens', 'reasoning_tokens', 'total_active_tokens', 'cache_read_tokens', 'cache_write_tokens', 'replies', 'sessions_active', 'avg_tokens_per_reply', 'peak_hour_local', 'share_pct']
+  ];
+  const grand = Math.max(1, d.daily.reduce((a, p) => a + p.input + p.output + p.reasoning, 0));
+  let ti = 0, to = 0, tr = 0, tc = 0, tw = 0, tm = 0, ts = 0;
+  [...d.daily].reverse().forEach(p => {
+    const tot = p.input + p.output + p.reasoning;
+    const share = (tot / grand * 100).toFixed(2);
+    const ph = p.peak_hour >= 0 ? String(p.peak_hour).padStart(2, '0') + ':00' : '';
+    rows.push([
+      p.key, p.input, p.output, p.reasoning, tot, p.cache_read, p.cache_write,
+      p.messages, p.sessions_active, p.avg_tokens, ph, share
+    ]);
+    ti += p.input; to += p.output; tr += p.reasoning; tc += p.cache_read; tw += p.cache_write; tm += p.messages; ts += p.sessions_active;
+  });
+  rows.push([
+    'TOTAL', ti, to, tr, ti + to + tr, tc, tw, tm, '', '', '', '100.00'
+  ]);
+  const csv = '\ufeff' + rows.map(r => r.join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   const tag = state.days === 'all' ? 'all' : state.days + 'd';
@@ -1104,6 +1223,7 @@ function exportCsv() {
   a.click();
 }
 $('#csv').addEventListener('click', exportCsv);
+$('#csv2').addEventListener('click', exportCsv);
 
 addEventListener('resize', () => { moveInd(); if (state.data) renderDaily(state.data.daily); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveInd);
