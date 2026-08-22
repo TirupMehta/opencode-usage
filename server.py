@@ -442,10 +442,13 @@ kbd{font-family:'JetBrains Mono',monospace;font-size:9.5px;background:rgba(255,2
 #tip.show{scale:1}
 #tip b{font-weight:600}
 #tip .tr{display:grid;grid-template-columns:10px 1fr max-content;gap:0 9px;align-items:center;margin-top:4px;color:var(--mut);min-width:150px}
-#tip .tr i{width:8px;height:8px;border-radius:2.5px}
-#tip .tr b{font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500}
+#tip .tr > i{grid-column:1;width:8px;height:8px;border-radius:2.5px}
+#tip .tr > span{grid-column:2}
+#tip .tr > b{grid-column:3;font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500}
+#tip .kv{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:4px;color:var(--mut)}
+#tip .kv b{font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500}
 #tip .tot{border-top:1px solid var(--line);margin-top:7px;padding-top:6px}
-#tip .tot span{color:var(--txt)}
+#tip .tot span{color:var(--txt);font-weight:600}
 ::-webkit-scrollbar{width:8px;height:8px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:99px}
@@ -675,7 +678,8 @@ function buildDense(anchors, salt){
     let ws=[],s=0;
     for(let j=0;j<N;j++){const w=.35+seededRand(i*131+j*17+salt)*1.4;ws.push(w);s+=w}
     const segPix=Math.abs(B.y-A.y);
-    const amp=Math.min(Math.max(segPix*.05,1),5.5);
+    const flat=segPix<0.75;
+    const amp=flat?0:Math.min(Math.max(segPix*.05,1),5.5);
     let acc=0;
     for(let j=1;j<N;j++){
       acc+=ws[j-1];
@@ -902,8 +906,8 @@ function renderHourly(h) {
       const x = h[+el.dataset.i];
       showTip(ev.clientX, ev.clientY, `
         <b>${String(x.hour).padStart(2, '0')}:00 – ${String(x.hour).padStart(2, '0')}:59</b>
-        <div class="tr"><span>Tokens</span><b>${full(x.input + x.output + x.reasoning)}</b></div>
-        <div class="tr"><span>Replies</span><b>${x.messages}</b></div>`);
+        <div class="kv"><span>Tokens</span><b>${full(x.input + x.output + x.reasoning)}</b></div>
+        <div class="kv"><span>Replies</span><b>${x.messages}</b></div>`);
     });
     el.addEventListener('mouseleave', () => { el.style.filter = ''; hideTip(); });
   });
@@ -1075,7 +1079,7 @@ $('#tabs').addEventListener('click', ev => {
   const b = ev.target.closest('.tab');
   if (b) setRange(b.dataset.days === 'all' ? 'all' : +b.dataset.days);
 });
-setInterval(() => { if ($('#auto').checked) load(); }, 30000);
+setInterval(() => { if ($('#auto').checked && !document.hidden) load(); }, 30000);
 
 document.addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1095,7 +1099,8 @@ function exportCsv() {
   const blob = new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'opencode-usage.csv';
+  const tag = state.days === 'all' ? 'all' : state.days + 'd';
+  a.download = 'opencode-usage-' + tag + '.csv';
   a.click();
 }
 $('#csv').addEventListener('click', exportCsv);
