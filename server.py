@@ -302,11 +302,13 @@ header{
 }
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .logo{
-  font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--accent);
-  width:36px;height:36px;border-radius:9px;background:var(--accent-dim);
-  border:1px solid rgba(76,141,248,.25);
+  width:38px;height:38px;border-radius:10px;
+  background:linear-gradient(150deg,rgba(76,141,248,.18),rgba(47,191,164,.07));
+  border:1px solid rgba(76,141,248,.32);
+  box-shadow:0 0 0 3px rgba(76,141,248,.06);
   display:grid;place-items:center;flex-shrink:0;
 }
+.logo svg{width:20px;height:20px}
 .brand h1{font-size:16.5px;font-weight:650;letter-spacing:-.01em;line-height:1.2;white-space:nowrap}
 .brand .path{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--dim);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-width:300px;margin-top:2px}
@@ -440,6 +442,17 @@ tr.detrow td{padding:0 10px;border-top:none;background:rgba(76,141,248,.04)}
 tr.detrow .detin{display:flex;flex-wrap:wrap;gap:6px 26px;padding:11px 2px;font-size:12px;color:var(--mut)}
 tr.detrow .detin b{font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500;margin-left:6px}
 tr.detrow.hidden{display:none}
+.drop{
+  border:1.5px dashed var(--line2);border-radius:10px;padding:28px 20px;text-align:center;
+  color:var(--dim);cursor:pointer;transition:border-color .2s,background .2s;
+}
+.drop:hover,.drop.over{border-color:rgba(76,141,248,.6);background:rgba(76,141,248,.05)}
+.drop svg{width:22px;height:22px;stroke:var(--accent);margin-bottom:9px}
+.drop .droplab{font-size:13px;color:var(--mut)}
+.drop .droplab b{color:var(--txt);font-weight:600}
+.drop .drophint{font-size:11px;color:var(--faint);margin-top:5px}
+.imp-meta{display:flex;flex-wrap:wrap;gap:8px 26px;padding:13px 2px 15px;font-size:12px;color:var(--mut)}
+.imp-meta b{font-family:'JetBrains Mono',monospace;color:var(--txt);font-weight:500;margin-left:6px}
 
 .statusbar{
   position:fixed;left:0;right:0;bottom:0;z-index:50;height:34px;
@@ -490,7 +503,14 @@ kbd{font-family:'JetBrains Mono',monospace;font-size:9.5px;background:rgba(255,2
 <div class="wrap">
 <header>
   <div class="brand">
-    <div class="logo">&gt;_</div>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5h16" stroke="#33333d" stroke-width="1.8"/>
+        <path d="M6 16v-4" stroke="#5b9cf8" stroke-width="2.6"/>
+        <path d="M12 16V7" stroke="#4c8df8" stroke-width="2.6"/>
+        <path d="M18 16v-6.5" stroke="#2fbfa4" stroke-width="2.6"/>
+      </svg>
+    </div>
     <div>
       <h1>OpenCode Usage</h1>
       <div class="path" id="dbPath">locating opencode database…</div>
@@ -588,6 +608,20 @@ kbd{font-family:'JetBrains Mono',monospace;font-size:9.5px;background:rgba(255,2
         <tbody id="dayBody"><tr><td colspan="11"><div class="skel" style="height:56px"></div></td></tr></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="panel" style="margin-top:16px">
+    <div class="phead">
+      <div class="pt"><h2>Import a CSV</h2><p>Inspect an exported file right here — nothing is uploaded anywhere</p></div>
+      <button class="btn ghost" id="clearImport" style="display:none">Clear</button>
+    </div>
+    <div class="drop" id="dropZone" tabindex="0" role="button" aria-label="Upload CSV file">
+      <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>
+      <div class="droplab">Drag &amp; drop a <b>.csv</b> here, or click to browse</div>
+      <div class="drophint">Works offline · files are parsed in your browser only</div>
+    </div>
+    <div id="importOut"></div>
   </section>
 </main>
 </div>
@@ -690,7 +724,7 @@ function deltaChip(daily, stepName) {
   if (!va && !vb) return '';
   const pct = vb ? (va - vb) / vb * 100 : null;
   const up = pct === null || pct >= 0;
-  const txt = pct === null ? 'new' : Math.abs(pct).toFixed(1) + '%';
+  const txt = pct === null ? '+' + fmt(va) : Math.abs(pct).toFixed(1) + '%';
   const arrow = up
     ? '<svg viewBox="0 0 10 10" fill="currentColor"><path d="M5 2l3.5 5h-7z"/></svg>'
     : '<svg viewBox="0 0 10 10" fill="currentColor"><path d="M5 8L1.5 3h7z"/></svg>';
@@ -1197,23 +1231,16 @@ function exportCsv() {
   if (!state.data) return;
   const d = state.data;
   const rows = [
-    ['period', 'input_tokens', 'output_tokens', 'reasoning_tokens', 'total_active_tokens', 'cache_read_tokens', 'cache_write_tokens', 'replies', 'sessions_active', 'avg_tokens_per_reply', 'peak_hour_local', 'share_pct']
+    ['period', 'input_tokens', 'output_tokens', 'reasoning_tokens', 'total_active_tokens', 'cache_read_tokens', 'cache_write_tokens', 'replies', 'sessions_active', 'avg_tokens_per_reply', 'peak_hour_local']
   ];
-  const grand = Math.max(1, d.daily.reduce((a, p) => a + p.input + p.output + p.reasoning, 0));
-  let ti = 0, to = 0, tr = 0, tc = 0, tw = 0, tm = 0, ts = 0;
   [...d.daily].reverse().forEach(p => {
     const tot = p.input + p.output + p.reasoning;
-    const share = (tot / grand * 100).toFixed(2);
     const ph = p.peak_hour >= 0 ? String(p.peak_hour).padStart(2, '0') + ':00' : '';
     rows.push([
       p.key, p.input, p.output, p.reasoning, tot, p.cache_read, p.cache_write,
-      p.messages, p.sessions_active, p.avg_tokens, ph, share
+      p.messages, p.sessions_active, p.avg_tokens, ph
     ]);
-    ti += p.input; to += p.output; tr += p.reasoning; tc += p.cache_read; tw += p.cache_write; tm += p.messages; ts += p.sessions_active;
   });
-  rows.push([
-    'TOTAL', ti, to, tr, ti + to + tr, tc, tw, tm, '', '', '', '100.00'
-  ]);
   const csv = '\ufeff' + rows.map(r => r.join(',')).join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -1224,6 +1251,101 @@ function exportCsv() {
 }
 $('#csv').addEventListener('click', exportCsv);
 $('#csv2').addEventListener('click', exportCsv);
+
+const dropZone = $('#dropZone'), csvInput = $('#csvFile');
+dropZone.addEventListener('click', () => csvInput.click());
+dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); csvInput.click(); } });
+['dragenter', 'dragover'].forEach(evName => dropZone.addEventListener(evName, e => { e.preventDefault(); dropZone.classList.add('over'); }));
+['dragleave', 'drop'].forEach(evName => dropZone.addEventListener(evName, e => { e.preventDefault(); dropZone.classList.remove('over'); }));
+dropZone.addEventListener('drop', e => handleFile(e.dataTransfer.files[0]));
+csvInput.addEventListener('change', () => handleFile(csvInput.files[0]));
+$('#clearImport').addEventListener('click', () => {
+  $('#importOut').innerHTML = '';
+  $('#clearImport').style.display = 'none';
+  csvInput.value = '';
+});
+
+function handleFile(file) {
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) return showImportError('File is larger than 5 MB.');
+  const nameOk = /\.csv$/i.test(file.name) || /csv/i.test(file.type);
+  if (!nameOk) return showImportError('Only .csv files are supported.');
+  const reader = new FileReader();
+  reader.onload = () => renderImport(file.name, reader.result);
+  reader.onerror = () => showImportError('Could not read the file.');
+  reader.readAsText(file);
+}
+
+function showImportError(msg) {
+  $('#importOut').innerHTML = '<div class="err" style="display:block">' + esc(msg) + '</div>';
+  $('#clearImport').style.display = '';
+}
+
+function parseCsvText(text) {
+  const lines = text.replace(/^\ufeff/, '').split(/\r?\n/).filter(l => l.trim().length);
+  if (lines.length < 2) throw new Error('file has no data rows');
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const col = name => headers.indexOf(name);
+  if (col('input_tokens') < 0 || col('period') < 0) throw new Error('unrecognized format — expected a file exported from this dashboard');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const c = lines[i].split(',');
+    const label = (c[col('period')] || '').trim();
+    if (/^total$/i.test(label)) continue;
+    const g = name => { const v = parseFloat(c[col(name)]); return isFinite(v) ? v : 0; };
+    rows.push({
+      label,
+      input: g('input_tokens'),
+      output: g('output_tokens'),
+      reasoning: g('reasoning_tokens'),
+      total: g('total_active_tokens') || g('input_tokens') + g('output_tokens') + g('reasoning_tokens'),
+      cache: g('cache_read_tokens'),
+      replies: g('replies'),
+      sessions: col('sessions_active') >= 0 ? g('sessions_active') : null,
+      avg: col('avg_tokens_per_reply') >= 0 ? g('avg_tokens_per_reply') : null,
+      peak: col('peak_hour_local') >= 0 ? c[col('peak_hour_local')] : ''
+    });
+  }
+  if (!rows.length) throw new Error('no usable rows found in file');
+  return rows;
+}
+
+function renderImport(fileName, text) {
+  let rows;
+  try { rows = parseCsvText(text); }
+  catch (e) { return showImportError(e.message); }
+  const sum = f => rows.reduce((a, r) => a + r[f], 0);
+  const totAll = sum('total');
+  $('#importOut').innerHTML = `
+    <div class="imp-meta">
+      <span>File<b>${esc(fileName)}</b></span>
+      <span>Periods<b>${rows.length}</b></span>
+      <span>Span<b>${esc(rows[rows.length - 1].label)} → ${esc(rows[0].label)}</b></span>
+      <span>Total tokens<b>${full(totAll)}</b></span>
+      <span>Cache reads<b>${full(sum('cache'))}</b></span>
+      <span>Replies<b>${full(sum('replies'))}</b></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Period</th><th style="text-align:right">Input</th><th style="text-align:right">Output</th><th style="text-align:right">Reasoning</th><th style="text-align:right">Total</th><th style="text-align:right">Cache reads</th><th style="text-align:right">Replies</th>${rows.some(r => r.sessions !== null) ? '<th style="text-align:right">Sessions</th>' : ''}${rows.some(r => r.peak) ? '<th style="text-align:right">Peak hour</th>' : ''}</tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr>
+            <td style="font-weight:550">${esc(r.label)}</td>
+            <td class="num">${full(r.input)}</td>
+            <td class="num">${full(r.output)}</td>
+            <td class="num">${full(r.reasoning)}</td>
+            <td class="num" style="color:#fff;font-weight:600">${full(r.total)}</td>
+            <td class="num">${full(r.cache)}</td>
+            <td class="num">${full(r.replies)}</td>
+            ${r.sessions !== null ? `<td class="num">${r.sessions}</td>` : ''}
+            ${r.peak ? `<td class="num">${esc(r.peak)}</td>` : ''}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+  $('#clearImport').style.display = '';
+  $('#importOut').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
 
 addEventListener('resize', () => { moveInd(); if (state.data) renderDaily(state.data.daily); });
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(moveInd);
